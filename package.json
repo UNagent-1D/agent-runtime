@@ -1,0 +1,30 @@
+{
+  "name": "agent-runtime",
+  "version": "1.0.0",
+  "description": "Manages modular configuration of agents.",
+  "main": "index.js",
+  "type": "module",  
+  "scripts": {
+    "dev": "ts-node --esm src/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UNagent-1D/agent-runtime.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/UNagent-1D/agent-runtime/issues"
+  },
+  "homepage": "https://github.com/UNagent-1D/agent-runtime#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,9 @@
+services:
+  agent-runtime:
+    build: .
+    container_name: agent-runtime-container
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+    restart: always
