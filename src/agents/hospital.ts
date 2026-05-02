@@ -1,4 +1,5 @@
 import type { AgentProfile } from '../types/agent.js';
+import { requireEnv } from '../env.js';
 
 const SYSTEM_PROMPT = `Eres el asistente de agendamiento de la Clínica San Ignacio (red privada en Bogotá y Medellín).
 
@@ -28,8 +29,8 @@ export const hospitalProfile: AgentProfile = {
   locale: 'es-CO',
   systemPrompt: SYSTEM_PROMPT,
   modelConfig: {
-    baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'nvidia/nemotron-3-super-120b-a12b:free',
+    baseUrl: requireEnv('OPENAI_BASE_URL'),
+    model: requireEnv('OPENAI_DEFAULT_MODEL'),
     temperature: 0.3,
     maxTokens: 1024,
   },
