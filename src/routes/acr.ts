@@ -13,7 +13,10 @@ acrRouter.get(
     const profileId = (req.params['profileId'] as string | undefined) ?? '';
     const profile = getProfile(profileId);
 
-    const model = (process.env['OPENAI_DEFAULT_MODEL'] ?? profile.modelConfig.model);
+    // profile.modelConfig.model is already populated from OPENAI_DEFAULT_MODEL at
+    // module load (see agents/hospital.ts), so the env var is the single source
+    // of truth — no inline override needed here.
+    const model = profile.modelConfig.model;
 
     const config: ACRConfig = {
       id: `cfg-${profile.id}-001`,
