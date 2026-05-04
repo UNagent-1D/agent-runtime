@@ -26,20 +26,17 @@ app.listen(port, () => {
   }
 });
 
-// Retry startResultConsumer up to 10 times with 3 s backoff.
-// Needed because Docker DNS may not resolve service hostnames
-// immediately after the container starts, even when depends_on
-// service_healthy passes.
+// Retry startResultConsumer indefinitely with capped exponential backoff.
+// Needed because Docker DNS may not resolve service hostnames immediately
+// after the container starts, even when depends_on service_healthy passes,
+// and because RabbitMQ may restart mid-session.
 async function startConsumerWithRetry(attempt = 1): Promise<void> {
   try {
     await startResultConsumer();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (attempt >= 10) {
-      console.error(`result consumer failed after ${attempt} attempts: ${msg}`);
-      return;
-    }
-    console.warn(`result consumer attempt ${attempt} failed (${msg}) — retrying in 3 s`);
-    setTimeout(() => void startConsumerWithRetry(attempt + 1), 3_000);
+    const delayMs = Math.min(3_000 * attempt, 30_000); // cap at 30 s
+    console.warn(`result consumer attempt ${attempt} failed (${msg}) — retrying in ${delayMs / 1000} s`);
+    setTimeout(() => void startConsumerWithRetry(attempt + 1), delayMs);
   }
 }
