@@ -58,11 +58,11 @@ jobsRouter.post('/api/v1/jobs', async (req: Request, res: Response) => {
 // GET /api/v1/jobs/:job_id/wait?timeout=<ms>
 // Returns: 200 { text, session_id } | 408 { error:"timeout" } | 404 { error:"unknown_job" }
 jobsRouter.get('/api/v1/jobs/:job_id/wait', async (req: Request, res: Response) => {
-  const { job_id } = req.params;
+  const job_id = req.params['job_id'] as string;
   const rawTimeout = parseInt(String(req.query['timeout'] ?? '30000'), 10);
   const timeoutMs = Math.min(isNaN(rawTimeout) ? 30_000 : rawTimeout, MAX_WAIT_MS);
 
-  const result = await waitForJob(job_id!, timeoutMs);
+  const result = await waitForJob(job_id, timeoutMs);
 
   if (result === null) {
     // Could be unknown job or genuine timeout — return 408 in both cases
