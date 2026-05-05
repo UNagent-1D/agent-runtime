@@ -6,6 +6,7 @@ import type { TenantDetail, ProfileDetail, DataSource } from '../types/tenant.js
 export const tenantStubRouter = Router();
 
 const HOSPITAL_MOCK_URL = process.env['HOSPITAL_MOCK_URL'] ?? 'http://hospital-mock:8080';
+const EMAIL_SEND_URL = process.env['EMAIL_SEND_URL'] ?? 'http://email-send:8080';
 
 // GET /api/v1/tenants/:tenantId
 // Called by conversation-chat's TenantClient.GetTenant()
@@ -42,7 +43,7 @@ tenantStubRouter.get('/api/v1/tenants/:tenantId/profiles', (_req: Request, res: 
 // conversation-chat's executeTool() substitutes {param} placeholders in the path and
 // sends the remaining parameters as the JSON body for POST requests.
 tenantStubRouter.get('/api/v1/tenants/:tenantId/data-sources', (_req: Request, res: Response) => {
-  const ds: DataSource = {
+  const hospitalDs: DataSource = {
     id: 'hospital-datasource',
     name: 'Hospital Mock API',
     source_type: 'rest',
@@ -56,5 +57,17 @@ tenantStubRouter.get('/api/v1/tenants/:tenantId/data-sources', (_req: Request, r
     },
     is_active: true,
   };
-  res.json({ data: [ds] });
+
+  const emailDs: DataSource = {
+    id: 'email-datasource',
+    name: 'UN-AGENT Email Service',
+    source_type: 'rest',
+    base_url: EMAIL_SEND_URL,
+    route_configs: {
+      send_confirmation_email: { method: 'POST', path: '/api/v1/emails' },
+    },
+    is_active: true,
+  };
+
+  res.json({ data: [hospitalDs, emailDs] });
 });

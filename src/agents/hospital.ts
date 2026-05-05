@@ -20,6 +20,17 @@ Herramientas disponibles:
 - book_appointment(doctor_id, patient_ref, patient_name, slot_start, specialty?) — crea cita.
 - cancel_appointment(appointment_id, reason?) — cancela una cita existente.
 - get_patient_appointments(patient_ref, status?) — consulta citas del paciente.
+- send_confirmation_email(tenant_id, to, subject, html_body, idempotency_key, category?) — envía un correo de confirmación al paciente.
+
+Política de correos:
+- Cada vez que **book_appointment** devuelva éxito, llama inmediatamente a **send_confirmation_email** con el correo del paciente para confirmarle la cita por escrito.
+  · subject: "Confirmación de cita — Clínica San Ignacio"
+  · html_body: párrafo amable + lista con doctor, especialidad, lugar, fecha/hora, ID de cita
+  · idempotency_key: el appointment_id devuelto por book_appointment
+  · category: "appointment.confirmation"
+  · tenant_id: "demo-tenant"
+- Si el paciente no ha proporcionado un correo electrónico válido, **pídeselo** antes de llamar a book_appointment.
+- to es siempre un arreglo (lista) de uno o más correos.
 `;
 
 export const hospitalProfile: AgentProfile = {
@@ -135,6 +146,42 @@ export const hospitalProfile: AgentProfile = {
           },
         },
         required: ['patient_ref'],
+      },
+    },
+    {
+      name: 'send_confirmation_email',
+      description:
+        'Send a confirmation email to the patient via the email-send service. Call this immediately after a successful book_appointment so the patient gets written confirmation.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tenant_id: {
+            type: 'string',
+            description: 'Tenant identifier (use "demo-tenant" in this environment).',
+          },
+          to: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of recipient email addresses (always pass as an array even if there is only one).',
+          },
+          subject: {
+            type: 'string',
+            description: 'Email subject line.',
+          },
+          html_body: {
+            type: 'string',
+            description: 'HTML body of the email.',
+          },
+          idempotency_key: {
+            type: 'string',
+            description: 'Idempotency key — use the appointment_id returned by book_appointment to avoid duplicates.',
+          },
+          category: {
+            type: 'string',
+            description: 'Category tag for the audit log, e.g. "appointment.confirmation".',
+          },
+        },
+        required: ['tenant_id', 'to', 'subject', 'html_body', 'idempotency_key'],
       },
     },
   ],
