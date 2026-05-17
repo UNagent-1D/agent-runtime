@@ -1,10 +1,34 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { HEADER_NAME, HEADER_VALUE, openJson, sealJson } from '../channel.js';
 
 export const proxyRouter = Router();
 
 const CONVERSATION_CHAT_URL =
   process.env['CONVERSATION_CHAT_URL'] ?? 'http://conversation-chat:8082';
+
+/**
+ * Build the headers + body for an outbound JSON request. When the secure
+ * channel is active, the body is sealed and the secure-channel headers are
+ * attached so the conversation-chat side knows to decrypt.
+ */
+function buildSecureRequest(value: unknown): { body: string; headers: Record<string, string> } {
+  const { body, contentType, encrypted } = sealJson(value);
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    Authorization: 'Bearer internal',
+  };
+  if (encrypted) headers[HEADER_NAME] = HEADER_VALUE;
+  return { body, headers };
+}
+
+/** Parse an upstream response, decrypting if it came back in envelope form. */
+async function readSecureResponse(upstream: globalThis.Response): Promise<unknown> {
+  const ct = upstream.headers.get('content-type') ?? undefined;
+  const text = await upstream.text();
+  if (text.length === 0) return {};
+  return openJson(ct, text);
+}
 
 function buildOpenSessionBody(tenantId: string) {
   return {
@@ -41,16 +65,14 @@ proxyRouter.post('/api/v1/sessions', async (req: Request, res: Response) => {
   }
 
   try {
+    const { body, headers } = buildSecureRequest(buildOpenSessionBody(tenantId));
     const upstream = await fetch(`${CONVERSATION_CHAT_URL}/api/v1/sessions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer internal',
-      },
-      body: JSON.stringify(buildOpenSessionBody(tenantId)),
+      headers,
+      body,
     });
 
-    const data = (await upstream.json()) as Record<string, unknown>;
+    const data = (await readSecureResponse(upstream)) as Record<string, unknown>;
 
     if (!upstream.ok) {
       res.status(upstream.status).json(data);
@@ -78,23 +100,21 @@ proxyRouter.post('/api/v1/sessions/:sid/turns', async (req: Request, res: Respon
   }
 
   try {
+    const { body, headers } = buildSecureRequest({
+      user_message: message,
+      message_id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      channel_key: '',
+    });
     const upstream = await fetch(
       `${CONVERSATION_CHAT_URL}/api/v1/sessions/${sid}/turns`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer internal',
-        },
-        body: JSON.stringify({
-          user_message: message,
-          message_id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          channel_key: '',
-        }),
+        headers,
+        body,
       },
     );
 
-    const data = (await upstream.json()) as unknown;
+    const data = await readSecureResponse(upstream);
     res.status(upstream.status).json(data);
   } catch (err) {
     res.status(502).json({ error: 'conversation-chat unavailable', detail: String(err) });

@@ -1,4 +1,11 @@
+import type { ConsumeMessage } from 'amqplib';
 import { getChannel } from './connection.js';
+import {
+  CONTENT_TYPE as SECURE_CONTENT_TYPE,
+  channelActive,
+  openJson,
+  sealJson,
+} from '../channel.js';
 
 export interface ChatJob {
   job_id: string;
@@ -74,9 +81,10 @@ export function waitForJob(jobId: string, timeoutMs: number): Promise<JobResult 
 
 export async function publishJob(job: ChatJob): Promise<void> {
   const ch = await getChannel();
-  ch.sendToQueue('chat_requests', Buffer.from(JSON.stringify(job)), {
+  const sealed = sealJson(job);
+  ch.sendToQueue('chat_requests', Buffer.from(sealed.body, 'utf8'), {
     persistent: true,
-    contentType: 'application/json',
+    contentType: sealed.contentType,
   });
 }
 
@@ -84,10 +92,13 @@ export async function startResultConsumer(): Promise<void> {
   const ch = await getChannel();
   await ch.consume(
     'chat_results',
-    (msg) => {
+    (msg: ConsumeMessage | null) => {
       if (!msg) return;
       try {
-        const result: ChatResult = JSON.parse(msg.content.toString());
+        const result = openJson(
+          msg.properties.contentType,
+          msg.content,
+        ) as ChatResult;
         resolveJob(result.job_id, {
           text: result.text,
           session_id: result.session_id,
@@ -100,5 +111,7 @@ export async function startResultConsumer(): Promise<void> {
     },
     { noAck: false },
   );
-  console.log('agent-runtime: consuming chat_results queue');
+  console.log(
+    `agent-runtime: consuming chat_results queue (secure channel ${channelActive() ? 'on' : 'off'}, expect ${channelActive() ? SECURE_CONTENT_TYPE : 'application/json'})`,
+  );
 }
