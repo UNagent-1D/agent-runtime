@@ -27,6 +27,7 @@ acrRouter.get(
         id: live.config_id,
         version: live.version,
         status: 'active',
+        ...(live.data_source_id ? { data_source_id: live.data_source_id } : {}),
         conversation_policy: live.conversation_policy ?? {},
         escalation_rules: {
           triggers,

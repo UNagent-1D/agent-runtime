@@ -13,6 +13,10 @@ export interface TenantActiveAgent {
   profile_name: string;
   config_id: string;
   version: number;
+  data_source_id?: string;
+  data_source_name?: string;
+  data_source_base_url?: string;
+  data_source_route_configs?: Record<string, { method: string; path: string }>;
   conversation_policy: Record<string, unknown>;
   escalation_rules: {
     triggers?: string[];

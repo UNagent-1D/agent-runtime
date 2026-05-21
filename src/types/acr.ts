@@ -30,6 +30,7 @@ export interface ACRConfig {
   id: string;
   version: number;
   status: string;
+  data_source_id?: string;
   conversation_policy: Record<string, unknown>;
   escalation_rules: EscalationRules;
   tool_permissions: ToolPermission[];
