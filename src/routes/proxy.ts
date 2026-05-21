@@ -30,7 +30,7 @@ async function readSecureResponse(upstream: globalThis.Response): Promise<unknow
   return openJson(ct, text);
 }
 
-function buildOpenSessionBody(tenantId: string) {
+function buildOpenSessionBody(tenantId: string, contactEmail: string) {
   return {
     channel: 'web',
     channel_key: tenantId,
@@ -42,22 +42,29 @@ function buildOpenSessionBody(tenantId: string) {
     tenant_id: tenantId,
     tenant_slug: tenantId,
     agent_profile_id: 'hospital-mock',
+    // exists=true when chat-orch supplied an OTP-verified email; that
+    // flips conversation-chat's buildEndUser into the authenticated
+    // branch and the email is stored alongside other identity fields.
     end_user: {
-      exists: false,
+      exists: contactEmail !== '',
       id: '',
       full_name: '',
       cellphone: tenantId,
       external_ref: '',
+      contact_email: contactEmail,
     },
   };
 }
 
 // POST /api/v1/sessions
-// Receives { tenant_id } from chat-orch's ConversationChatClient.create_session().
-// Adapts to conversation-chat's full OpenSessionRequest and returns { sid }.
+// Receives { tenant_id, contact_email? } from chat-orch's
+// ConversationChatClient.create_session(). contact_email is plumbed
+// through to the session so that conversation-chat can fire booking
+// confirmation emails post-tool-call.
 proxyRouter.post('/api/v1/sessions', async (req: Request, res: Response) => {
-  const body = req.body as { tenant_id?: unknown };
+  const body = req.body as { tenant_id?: unknown; contact_email?: unknown };
   const tenantId = typeof body.tenant_id === 'string' ? body.tenant_id : '';
+  const contactEmail = typeof body.contact_email === 'string' ? body.contact_email : '';
 
   if (!tenantId) {
     res.status(400).json({ error: 'tenant_id is required' });
@@ -65,7 +72,7 @@ proxyRouter.post('/api/v1/sessions', async (req: Request, res: Response) => {
   }
 
   try {
-    const { body, headers } = buildSecureRequest(buildOpenSessionBody(tenantId));
+    const { body, headers } = buildSecureRequest(buildOpenSessionBody(tenantId, contactEmail));
     const upstream = await fetch(`${CONVERSATION_CHAT_URL}/api/v1/sessions`, {
       method: 'POST',
       headers,

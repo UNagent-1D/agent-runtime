@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { hospitalProfile } from '../agents/hospital.js';
 import type { TenantDetail, ProfileDetail, DataSource } from '../types/tenant.js';
+import { fetchActiveAgent } from '../tenant_client.js';
 
 export const tenantStubRouter = Router();
 
@@ -39,10 +40,45 @@ tenantStubRouter.get('/api/v1/tenants/:tenantId/profiles', (_req: Request, res: 
 
 // GET /api/v1/tenants/:tenantId/data-sources
 // Called by conversation-chat's TenantClient.GetDataSources()
-// Route configs map each tool name to a hospital-mock HTTP endpoint.
-// conversation-chat's executeTool() substitutes {param} placeholders in the path and
-// sends the remaining parameters as the JSON body for POST requests.
-tenantStubRouter.get('/api/v1/tenants/:tenantId/data-sources', (_req: Request, res: Response) => {
+//
+// Tries to resolve per-tenant data sources live from Tenant's ACR endpoint
+// (which now carries the active data_source's base_url + route_configs).
+// Falls back to the hardcoded hospital + email stubs when Tenant is
+// unreachable or the tenant has no provisioned data source — same behaviour
+// as before the live lookup landed.
+tenantStubRouter.get('/api/v1/tenants/:tenantId/data-sources', async (req: Request, res: Response) => {
+  const tenantId = (req.params['tenantId'] as string | undefined) ?? '';
+
+  const emailDs: DataSource = {
+    id: 'email-datasource',
+    name: 'UN-AGENT Email Service',
+    source_type: 'rest',
+    base_url: EMAIL_SEND_URL,
+    route_configs: {
+      send_confirmation_email: { method: 'POST', path: '/api/v1/emails' },
+    },
+    is_active: true,
+  };
+
+  if (tenantId) {
+    const live = await fetchActiveAgent(tenantId);
+    if (live && live.data_source_id && live.data_source_base_url && live.data_source_route_configs) {
+      const liveDs: DataSource = {
+        id: live.data_source_id,
+        name: live.data_source_name ?? 'Hospital Mock API',
+        source_type: 'rest',
+        base_url: live.data_source_base_url,
+        route_configs: live.data_source_route_configs,
+        is_active: true,
+      };
+      res.json({ data: [liveDs, emailDs] });
+      return;
+    }
+  }
+
+  // Fallback: hardcoded route_configs. Mirrors the live row's contents so
+  // conversation-chat's executeTool sees the same six operations whether or
+  // not Tenant is reachable.
   const hospitalDs: DataSource = {
     id: 'hospital-datasource',
     name: 'Hospital Mock API',
@@ -53,18 +89,8 @@ tenantStubRouter.get('/api/v1/tenants/:tenantId/data-sources', (_req: Request, r
       get_doctor_schedule: { method: 'GET', path: '/doctors/{doctor_id}/schedule' },
       book_appointment: { method: 'POST', path: '/appointments' },
       cancel_appointment: { method: 'POST', path: '/appointments/{appointment_id}/cancel' },
+      reschedule_appointment: { method: 'POST', path: '/appointments/{appointment_id}/reschedule' },
       get_patient_appointments: { method: 'GET', path: '/patients/{patient_ref}/appointments' },
-    },
-    is_active: true,
-  };
-
-  const emailDs: DataSource = {
-    id: 'email-datasource',
-    name: 'UN-AGENT Email Service',
-    source_type: 'rest',
-    base_url: EMAIL_SEND_URL,
-    route_configs: {
-      send_confirmation_email: { method: 'POST', path: '/api/v1/emails' },
     },
     is_active: true,
   };

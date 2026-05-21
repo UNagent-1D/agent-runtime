@@ -66,7 +66,14 @@ export function waitForJob(jobId: string, timeoutMs: number): Promise<JobResult 
     const timer = setTimeout(() => {
       const e = pending.get(jobId);
       if (e && !e.result) {
-        // Leave entry alive so background waiter can still get the result
+        // Leave entry alive so a background waiter can still get the
+        // result, AND detach our resolver. Otherwise a late-arriving
+        // resolveJob() would call this already-resolved callback, which
+        // would delete the pending entry — and the next waitForJob()
+        // (e.g. the chat-orch background poll after the 5s fast wait)
+        // would find nothing and return null. Race observed when the
+        // worker publishes within milliseconds of the fast wait expiring.
+        e.resolve = () => {};
         resolve(null);
       }
     }, timeoutMs);
@@ -88,7 +95,11 @@ export async function publishJob(job: ChatJob): Promise<void> {
   });
 }
 
-export async function startResultConsumer(): Promise<void> {
+// Single-shot consumer registration. The wrapper at the caller (index.ts)
+// handles reconnect — see `onChannelClose` below.
+export async function startResultConsumer(
+  onChannelClose?: () => void,
+): Promise<void> {
   const ch = await getChannel();
   await ch.consume(
     'chat_results',
@@ -114,4 +125,19 @@ export async function startResultConsumer(): Promise<void> {
   console.log(
     `agent-runtime: consuming chat_results queue (secure channel ${channelActive() ? 'on' : 'off'}, expect ${channelActive() ? SECURE_CONTENT_TYPE : 'application/json'})`,
   );
+
+  // Re-register on channel/connection drop. amqplib emits `close` on both
+  // graceful and forced shutdowns; once it fires, the consumer is gone and
+  // getChannel() will hand back a fresh channel on the next call. The caller
+  // wires this to its retry-with-backoff loop so a mid-session RabbitMQ
+  // restart doesn't leave Telegram messages hanging until orch restart.
+  if (onChannelClose) {
+    ch.once('close', () => {
+      console.warn('agent-runtime: chat_results channel closed — re-registering consumer');
+      onChannelClose();
+    });
+    ch.once('error', (err: Error) => {
+      console.error('agent-runtime: chat_results channel error:', err.message);
+    });
+  }
 }

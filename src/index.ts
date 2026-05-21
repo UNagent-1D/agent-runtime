@@ -46,12 +46,19 @@ app.listen(port, () => {
 });
 
 // Retry startResultConsumer indefinitely with capped exponential backoff.
-// Needed because Docker DNS may not resolve service hostnames immediately
-// after the container starts, even when depends_on service_healthy passes,
-// and because RabbitMQ may restart mid-session.
+// Needed because:
+//   * Docker DNS may not resolve service hostnames immediately after the
+//     container starts, even when depends_on service_healthy passes.
+//   * RabbitMQ may restart mid-session, dropping the consumer registration
+//     even though getChannel() will eventually reconnect for publishes.
+// The onChannelClose callback below re-enters this loop with attempt=1 the
+// moment the channel dies, so a mid-session blip recovers transparently.
 async function startConsumerWithRetry(attempt = 1): Promise<void> {
   try {
-    await startResultConsumer();
+    await startResultConsumer(() => {
+      // Channel closed — re-register from scratch on a fresh channel.
+      void startConsumerWithRetry(1);
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     const delayMs = Math.min(3_000 * attempt, 30_000); // cap at 30 s
