@@ -43,7 +43,9 @@ export const hospitalProfile: AgentProfile = {
     baseUrl: requireEnv('OPENAI_BASE_URL'),
     model: requireEnv('OPENAI_DEFAULT_MODEL'),
     temperature: 0.3,
-    maxTokens: 1024,
+    // 2048: deepseek's verbose structured JSON (tool calls with long
+    // operator notes) can brush past 1024, truncating to unparseable output.
+    maxTokens: 2048,
   },
   tools: [
     {
